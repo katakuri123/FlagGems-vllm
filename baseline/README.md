@@ -1,5 +1,8 @@
 # Recurrent GDN native baselines
 
+> The generic contract, examples and review checklist live in
+> [CONTRIBUTING.md](CONTRIBUTING.md).
+
 The two GDN operators share one change set and retain separate implementation,
 test, benchmark and baseline modules.
 

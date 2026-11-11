@@ -21,6 +21,7 @@ import torch
 OP_NAME = "persistent_topk"
 DTYPES = [torch.float32]
 IS_INPLACE = False
+NATIVE_UNAVAILABLE_REASON = None
 
 K = 512
 WORKSPACE_BYTES = 1 << 20
@@ -53,12 +54,22 @@ _HOMO_SHAPES = [
 
 
 def native():
+    global NATIVE_UNAVAILABLE_REASON
+
     try:
         importlib.import_module("vllm._custom_ops")
-    except ImportError:
+    except ImportError as exc:
+        NATIVE_UNAVAILABLE_REASON = repr(exc)
         return None
-    op = getattr(getattr(torch.ops, "_C", None), "persistent_topk", None)
-    return op if callable(op) else None
+
+    ext = getattr(torch.ops, "_C", None)
+    op = getattr(ext, "persistent_topk", None) if ext is not None else None
+    if callable(op):
+        NATIVE_UNAVAILABLE_REASON = None
+        return op
+
+    NATIVE_UNAVAILABLE_REASON = "torch.ops._C.persistent_topk absent"
+    return None
 
 
 def grid():

@@ -19,18 +19,26 @@ import torch
 OP_NAME = "grouped_topk"
 DTYPES = [torch.bfloat16, torch.float16]
 IS_INPLACE = False
+NATIVE_UNAVAILABLE_REASON = None
 
 
 def native():
+    global NATIVE_UNAVAILABLE_REASON
+
     try:
         importlib.import_module("vllm._custom_ops")
-        if hasattr(torch.ops._moe_C, "grouped_topk"):
-            op = torch.ops._moe_C.grouped_topk
-        else:
-            op = None
-    except (ImportError, AttributeError):
+    except ImportError as exc:
+        NATIVE_UNAVAILABLE_REASON = repr(exc)
         return None
-    return op if callable(op) else None
+
+    moe = getattr(torch.ops, "_moe_C", None)
+    op = getattr(moe, "grouped_topk", None) if moe is not None else None
+    if callable(op):
+        NATIVE_UNAVAILABLE_REASON = None
+        return op
+
+    NATIVE_UNAVAILABLE_REASON = "torch.ops._moe_C.grouped_topk absent"
+    return None
 
 
 def grid():
