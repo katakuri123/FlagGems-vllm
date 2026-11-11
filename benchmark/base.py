@@ -583,8 +583,13 @@ class Benchmark:
                                 )
 
                     if "gbps" in self.to_bench_metrics:
-                        metric.gbps_base = self.get_gbps(
-                            args, latency=metric.latency_base
+                        # A missing baseline (torch_op is None) has no latency to
+                        # derive reference bytes/s from; keep it unset instead of
+                        # dividing by None.
+                        metric.gbps_base = (
+                            self.get_gbps(args, latency=metric.latency_base)
+                            if metric.latency_base is not None
+                            else None
                         )
                         metric.gbps = self.get_gbps(args, latency=metric.latency)
 

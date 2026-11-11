@@ -51,6 +51,32 @@
       }
     },
     {
+      "vendor": "nvidia",
+      "chip": "H20",
+      "measured": {
+        "memory_gib": 95.6,
+        "bandwidth_gbps": 3362.0,
+        "tensor": {
+          "bf16": 137.1,
+          "fp16": 137.0,
+          "fp32": 30.6,
+          "tf32": 70.5,
+          "int8": null,
+          "fp64": 0.6,
+          "fp8": null
+        },
+        "vector": {
+          "bf16": null,
+          "fp16": null,
+          "fp32": null,
+          "int8": null,
+          "fp64": null,
+          "fp8": null
+        }
+      },
+      "measurement_note": "Measured 2026-11-06 on a single H20 (96GB HBM3, driver 610.43.02). bandwidth_gbps: 2 GiB copy_ (read+write), median of 300 reps. tensor.*: 8192^3 bf16/fp16 and 4096^3 fp32/tf32, 2048^3 fp64 matmul. int8/fp8/vector left null: torch._int_mm measured 77.6 TFLOPS (26% of the 296 spec), i.e. the probe did not reach the tensor path, and no reliable vector probe was run. Nominal specs for reference: 4000 GB/s, bf16/fp16 148, fp8/int8 296, tf32 74, fp32 44, fp64 1 TFLOPS."
+    },
+    {
       "vendor": "thead",
       "chip": "PPU-ZW810E",
       "measured": {
