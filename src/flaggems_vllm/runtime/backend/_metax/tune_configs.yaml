@@ -280,6 +280,17 @@ mhc_shifted_norm:
     w: [2, 4, 8]
     s: [1]
 
+# Single-pass RMSNorm used by the MetaX hc=4 path.  BLOCK_D is
+# next_power_of_2(D) and is passed by the host, so only the warp count is
+# tuned here.
+mhc_shifted_norm_metax:
+  - META: {}
+    num_warps: 4
+    num_stages: 1
+  - META: {}
+    num_warps: 8
+    num_stages: 1
+
 # MetaX-only fused post + collapse + sum-of-squares kernel.
 mhc_shifted_post_collapse:
   - gen: true

@@ -311,10 +311,60 @@ def _mhc_shifted_ssq_reduce_kernel(
     tl.store(ssq_ptr + n, acc)
 
 
+@libentry()
+@libtuner(
+    configs=runtime.get_tuned_config("mhc_shifted_norm_metax"),
+    key=["D"],
+    warmup=5,
+    rep=10,
+)
+@triton.jit
+def _mhc_shifted_norm_metax_kernel(
+    X,  # (num_tokens, D) bfloat16
+    W,  # (D,) bfloat16
+    Y,  # (num_tokens, D) bfloat16
+    D,
+    EPS: tl.constexpr,
+    BLOCK_D: tl.constexpr,
+):
+    """Single-pass RMSNorm: load the row once, reduce, normalise and store."""
+    row = tl.program_id(0)
+    offs = tl.arange(0, BLOCK_D)
+    mask = offs < D
+    value = tl.load(X + row * D + offs, mask=mask, other=0.0).to(tl.float32)
+    ssq = tl.sum(value * value, axis=0)
+    inv = tl.rsqrt(ssq / D + EPS)
+    result = value * inv * tl.load(W + offs, mask=mask, other=0.0).to(tl.float32)
+    tl.store(Y + row * D + offs, result.to(tl.bfloat16), mask=mask)
+
+
+def mhc_shifted_norm_metax(x, weight, eps):
+    """One-pass RMSNorm when the row fits in one CTA (D <= 8192)."""
+    D = x.shape[1]
+    out = torch.empty_like(x)
+    block_d = triton.next_power_of_2(D)
+    # BLOCK_D must cover the whole row; aabs must not rewrite it to a divisor.
+    aabs = triton.knobs.autotuning.adjust_block_size
+    triton.knobs.autotuning.adjust_block_size = False
+    try:
+        _mhc_shifted_norm_metax_kernel[(x.shape[0],)](
+            x, weight, out, D, EPS=eps, BLOCK_D=block_d
+        )
+    finally:
+        triton.knobs.autotuning.adjust_block_size = aabs
+    return out
+
+
 def _split_k_for(num_tokens, hc_hidden_size):
     """Split K until the grid covers the C550 CUs, without shattering K."""
     est_m = max(1, triton.cdiv(num_tokens, 32))
-    split = max(1, min(8, 104 // est_m))
+    occupancy = 104 // est_m
+    # One M wave leaves most of the 104 CUs idle (e.g. the 2048-token
+    # boundary); fill the machine with K splits instead.  Larger batches
+    # already saturate the memory system, so they keep split_k=1.
+    if occupancy == 1 and num_tokens < 4096:
+        occupancy = 8
+    split = max(1, min(8, occupancy))
     return min(split, max(1, hc_hidden_size // 256))
 
 

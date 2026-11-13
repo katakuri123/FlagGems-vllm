@@ -505,6 +505,7 @@ def mhc_shifted_post_pre(
     if use_metax_fused:
         from flaggems_vllm.runtime.backend._metax.ops.mhc_shifted_post_pre import (
             _fn_bf16_packed,
+            mhc_shifted_norm_metax,
             mhc_shifted_post_collapse,
             mhc_shifted_project_metax,
         )
@@ -591,20 +592,25 @@ def mhc_shifted_post_pre(
             WRITE_AUX=capture_aux,
         )
 
-    # (5) optional RMSNorm of the collapsed input.
+    # (5) optional RMSNorm of the collapsed input.  The MetaX path loads the
+    # row once when it fits in a single CTA instead of the generic two-pass
+    # kernel's two reads.
     if norm_weight is not None:
-        normed = torch.empty(
-            num_tokens, hidden_size, dtype=torch.bfloat16, device=device
-        )
-        _mhc_shifted_norm_kernel[(num_tokens,)](
-            layer_input,
-            norm_weight,
-            normed,
-            hidden_size,
-            EPS=norm_eps,
-            HAS_W=True,
-        )
-        layer_input = normed
+        if use_metax_fused and 4096 <= hidden_size <= 8192:
+            layer_input = mhc_shifted_norm_metax(layer_input, norm_weight, norm_eps)
+        else:
+            normed = torch.empty(
+                num_tokens, hidden_size, dtype=torch.bfloat16, device=device
+            )
+            _mhc_shifted_norm_kernel[(num_tokens,)](
+                layer_input,
+                norm_weight,
+                normed,
+                hidden_size,
+                EPS=norm_eps,
+                HAS_W=True,
+            )
+            layer_input = normed
 
     return residual_cur, post_mix, comb_mix, layer_input, next_pre, aux
 
